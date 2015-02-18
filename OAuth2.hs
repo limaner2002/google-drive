@@ -20,8 +20,8 @@ data OAuth2WebServerFlow = OAuth2WebServerFlow
       deviceUri :: !String
     }
 
-get :: OAuth2WebServerFlow -> String
-get flow = request flow
+getAuthorizeUrl :: OAuth2WebServerFlow -> String
+getAuthorizeUrl flow = request flow
 
 instance Show OAuth2WebServerFlow
     where

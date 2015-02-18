@@ -1,6 +1,7 @@
 module ConfigFile (
                    Config,
-                   readConfig
+                   readConfig,
+                   param
                   ) where
 
 import Data.Char
@@ -59,3 +60,5 @@ readConfig name = do
   conf <- readConfig_ name
   return $ fromLeft $ conf
 
+param :: (Ord k) => k -> Map.Map k a -> a
+param k m = fromJust $ Map.lookup k m
