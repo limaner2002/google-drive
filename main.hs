@@ -10,14 +10,16 @@ import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as BL
 
 import Network.HTTP.Conduit -- the main module
+import Network.HTTP.Base (urlEncode)
 import System.IO (hFlush, stdout)
+import Control.Arrow (second)
 
 main :: IO ()
 main = do
   conf <- readConfig "configuration"
-  authorization <- readConfig "authorization.txt"
+  -- authorization <- readConfig "authorization.txt"
 
-  let oauthScope = [param "scopes" conf]
+  let oauthScope = map urlEncode [param "scopes" conf]
   let redirectUri = param "redirectUri" conf
   let userAgent = param "userAgent" conf
   let authUri = param "authUri" conf
@@ -39,22 +41,22 @@ main = do
   hFlush stdout
   authCode <- getLine
 
-  let params = [("grant_type", "authorization_code"),
-                ("client_id", C8.pack clientId),
-                ("client_secret", C8.pack clientSecret),
-                ("redirect_uri", C8.pack redirectUri),
-                ("code", C8.pack authCode)
+  let params = [("client_id", clientId),
+                ("client_secret", clientSecret),
+                ("grant_type", "authorization_code"),
+                ("redirect_uri", redirectUri),
+                ("code", authCode)
                ]
 
   printf "The authorization code is %s\n" authCode
 
-  req <- parseUrl authUri
-  let req2 = urlEncodedBody params req
+  req <- parseUrl tokenUri
+  let req2 = urlEncodedBody (map (second C8.pack) params) req
 
-  let j = "{  \"access_token\":\"1/fFAGRNJru1FTz70BzhT3Zg\",  \"expires_in\":3920,  \"token_type\":\"Bearer\",  \"refresh_token\":\"1/xEoDL4iW3cxlI7yDbSRFYNG01kVKM2C-259HOF2aQbI\"}"
+  -- let j = "{  \"access_token\":\"1/fFAGRNJru1FTz70BzhT3Zg\",  \"expires_in\":3920,  \"token_type\":\"Bearer\",  \"refresh_token\":\"1/xEoDL4iW3cxlI7yDbSRFYNG01kVKM2C-259HOF2aQbI\"}"
   
   putStrLn $ show req2
 
   result <- withManager $ httpLbs $ req2
-  putStrLn $ show (decode j)
+  -- putStrLn $ show (decode j)
   putStrLn $ show $ responseBody result
