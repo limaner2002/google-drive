@@ -2,7 +2,8 @@
 module OAuth2 (
                OAuth2WebServerFlow,
                createFlow,
-               getTokens
+               getTokens,
+               refreshTokens
               )
     where
 
@@ -52,7 +53,6 @@ createFlow configFile authorizationFile = do
   let clientId = param "clientId" conf
   let clientSecret = param "clientSecret" conf
 
-
   return $ OAuth2WebServerFlow (CSRFToken clientId "someState" "drive")
          clientSecret oauthScope redirectUri
          userAgent authUri tokenUri revokeUri loginHint deviceUri
@@ -60,17 +60,33 @@ createFlow configFile authorizationFile = do
 getAuthorizeUrl :: OAuth2WebServerFlow -> String
 getAuthorizeUrl flow = request flow
 
+exceptionHandler :: OAuth2WebServerFlow -> SomeException -> IO (Maybe Token)
+exceptionHandler flow e = do
+  putStrLn "Could not read token file! Requesting new ones"
+  tok <- requestTokens flow
+  return $ Just tok
+
 getTokens :: OAuth2WebServerFlow -> IO (Token)
 getTokens flow = do
-  tok <- try $ load "token" :: IO (Either SomeException (Maybe Token))
+  tok <- catch (load "token") (exceptionHandler flow)
   case tok of
-    Left ex -> do putStrLn "Could not read token file! Requesting a new one"
-                  requestTokens flow
-    Right t -> case t of
-                 Nothing -> do
-                        putStrLn "Possibly corrupt token file! Requesting a new one"
-                        requestTokens flow
-                 Just token -> return token
+    Nothing -> do
+             putStrLn "Possibly corrupt token file! Requesting a new one"
+             requestTokens flow
+    Just token -> return token
+
+refreshTokens :: OAuth2WebServerFlow -> Token -> IO (Token)
+refreshTokens flow oldToken = do
+  let tok = token flow
+  let params = [("client_id", clientId tok),
+                ("client_secret", clientSecret flow),
+                ("grant_type", "refresh_token"),
+                ("refresh_token", refreshToken oldToken)
+               ]
+  request <- parseUrl $ tokenUri flow
+  result <- withManager $ httpLbs $ urlEncodedBody (map (second C8.pack) params) request
+
+  return $ decode $ responseBody result
 
 requestTokens :: OAuth2WebServerFlow -> IO (Token)
 requestTokens flow = do
@@ -94,7 +110,6 @@ requestTokens flow = do
   result <- withManager $ httpLbs $ urlEncodedBody (map (second C8.pack) params) request
 
   return $ decode $ responseBody result
-
 
 instance Show OAuth2WebServerFlow
     where
