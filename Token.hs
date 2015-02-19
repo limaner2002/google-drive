@@ -16,7 +16,7 @@ data Token = Token
     { accessToken :: !String,
       expiration :: !Int,
       tokenType :: !String,
-      refreshToken :: !String
+      refreshToken :: Maybe String
     } deriving (Show, Generic)
 
 decode :: BL.ByteString -> Token
@@ -37,7 +37,7 @@ instance FromJSON Token where
                            v .: "access_token" <*>
                            v .: "expires_in" <*>
                            v .: "token_type" <*>
-                           v .: "refresh_token"
+                           v .:? "refresh_token"
     parseJSON _ = mzero
 
 instance ToJSON Token where

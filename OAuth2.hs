@@ -11,6 +11,7 @@ import URI
 import CSRFToken
 import Data.Monoid ((<>))
 import Data.List (intercalate)
+import Data.Maybe (fromJust)
 import Network.HTTP.Base (urlEncode)
 import Token
 import Text.Printf
@@ -22,6 +23,7 @@ import Control.Exception
 
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Lazy.Char8 as L8
 
 
 data OAuth2WebServerFlow = OAuth2WebServerFlow
@@ -81,12 +83,14 @@ refreshTokens flow oldToken = do
   let params = [("client_id", clientId tok),
                 ("client_secret", clientSecret flow),
                 ("grant_type", "refresh_token"),
-                ("refresh_token", refreshToken oldToken)
+                ("refresh_token", fromJust $ refreshToken oldToken)
                ]
   request <- parseUrl $ tokenUri flow
   result <- withManager $ httpLbs $ urlEncodedBody (map (second C8.pack) params) request
 
-  return $ decode $ responseBody result
+  let newToken = decode $ responseBody result
+
+  return $ newToken { refreshToken = refreshToken oldToken }
 
 requestTokens :: OAuth2WebServerFlow -> IO (Token)
 requestTokens flow = do

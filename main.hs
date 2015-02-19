@@ -29,7 +29,7 @@ main = do
   then do
       putStrLn "Refreshing token now"
       newToken <- refreshTokens webFlow accessToken
-      putStrLn $ show newToken
+      save "token" newToken
   else
       putStrLn "Continuing as usual."
            
