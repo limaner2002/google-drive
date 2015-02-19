@@ -1,5 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
-module OAuth2
+module OAuth2 (
+               OAuth2WebServerFlow,
+               createFlow,
+               getTokens
+              )
     where
 
 import URI
@@ -13,6 +17,7 @@ import System.IO (hFlush, stdout)
 import Network.HTTP.Conduit -- the main module
 import Control.Arrow (second)
 import ConfigFile
+import Control.Exception
 
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as BL
@@ -57,6 +62,18 @@ getAuthorizeUrl flow = request flow
 
 getTokens :: OAuth2WebServerFlow -> IO (Token)
 getTokens flow = do
+  tok <- try $ load "token" :: IO (Either SomeException (Maybe Token))
+  case tok of
+    Left ex -> do putStrLn "Could not read token file! Requesting a new one"
+                  requestTokens flow
+    Right t -> case t of
+                 Nothing -> do
+                        putStrLn "Possibly corrupt token file! Requesting a new one"
+                        requestTokens flow
+                 Just token -> return token
+
+requestTokens :: OAuth2WebServerFlow -> IO (Token)
+requestTokens flow = do
   let tok = token flow
 
   printf "\nVisit the following URL to retreive a verification code:\n\n"
@@ -77,6 +94,7 @@ getTokens flow = do
   result <- withManager $ httpLbs $ urlEncodedBody (map (second C8.pack) params) request
 
   return $ decode $ responseBody result
+
 
 instance Show OAuth2WebServerFlow
     where
