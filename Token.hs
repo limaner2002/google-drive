@@ -22,8 +22,9 @@ data Token = Token
 decode :: BL.ByteString -> Token
 decode j = fromJust (Data.Aeson.decode j :: Maybe Token)
 
-save :: FilePath -> Token -> IO ()
-save fileName tok = BL.writeFile fileName encoded
+save :: FilePath -> Maybe Token -> IO ()
+save _ Nothing = putStrLn "Cannot save Nothing"
+save fileName (Just tok) = BL.writeFile fileName encoded
     where
       encoded = Data.Aeson.encode tok
 

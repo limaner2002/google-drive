@@ -33,12 +33,11 @@ main = do
       save "token" newToken
   else
       putStrLn "Continuing as usual."
-           
 
   L8.putStrLn $ responseBody response
   putStrLn "Done!"
  where
-   authorize token request = request
+   authorize (Just token) request = request
                              {
                                requestHeaders = [(hAuthorization, B8.pack $ "Bearer " ++ accessToken token)]
                              }

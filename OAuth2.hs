@@ -17,12 +17,10 @@ import Token
 import Text.Printf
 import System.IO (hFlush, stdout)
 import Network.HTTP.Conduit -- the main module
-import Control.Arrow (second)
 import ConfigFile
 import Control.Exception
 import Util
 
-import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as L8
 
@@ -63,31 +61,27 @@ createFlow configFile authorizationFile = do
 getAuthorizeUrl :: OAuth2WebServerFlow -> String
 getAuthorizeUrl flow = request flow
 
-getTokens :: OAuth2WebServerFlow -> IO (Token)
+getTokens :: OAuth2WebServerFlow -> IO (Maybe Token)
 getTokens flow = do
   tok <- fromFile "token"
   case tok of
     Nothing -> do
              putStrLn "Requesting new tokens"
              requestTokens flow
-    Just token -> return token
+    Just token -> return $ Just token
 
-refreshTokens :: OAuth2WebServerFlow -> Token -> IO (Token)
-refreshTokens flow oldToken = do
+refreshTokens :: OAuth2WebServerFlow -> Maybe Token -> IO (Maybe Token)
+refreshTokens _ Nothing = return Nothing
+refreshTokens flow (Just oldToken) = do
   let tok = token flow
   let params = [("client_id", clientId tok),
                 ("client_secret", clientSecret flow),
                 ("grant_type", "refresh_token"),
                 ("refresh_token", fromJust $ refreshToken oldToken)
                ]
-  request <- parseUrl $ tokenUri flow
-  result <- withManager $ httpLbs $ urlEncodedBody (map (second C8.pack) params) request
+  fromUrl (tokenUri flow) params
 
-  let newToken = decode $ responseBody result
-
-  return $ newToken { refreshToken = refreshToken oldToken }
-
-requestTokens :: OAuth2WebServerFlow -> IO (Token)
+requestTokens :: OAuth2WebServerFlow -> IO (Maybe Token)
 requestTokens flow = do
   let tok = token flow
 
@@ -104,11 +98,7 @@ requestTokens flow = do
                 ("code", authCode)
                ]
 
-  request <- parseUrl $ tokenUri flow
-
-  result <- withManager $ httpLbs $ urlEncodedBody (map (second C8.pack) params) request
-
-  return $ decode $ responseBody result
+  fromUrl (tokenUri flow) params
 
 instance Show OAuth2WebServerFlow
     where
