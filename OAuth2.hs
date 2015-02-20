@@ -20,6 +20,7 @@ import Network.HTTP.Conduit -- the main module
 import Control.Arrow (second)
 import ConfigFile
 import Control.Exception
+import Util
 
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as BL
@@ -62,18 +63,12 @@ createFlow configFile authorizationFile = do
 getAuthorizeUrl :: OAuth2WebServerFlow -> String
 getAuthorizeUrl flow = request flow
 
-exceptionHandler :: OAuth2WebServerFlow -> SomeException -> IO (Maybe Token)
-exceptionHandler flow e = do
-  putStrLn "Could not read token file! Requesting new ones"
-  tok <- requestTokens flow
-  return $ Just tok
-
 getTokens :: OAuth2WebServerFlow -> IO (Token)
 getTokens flow = do
-  tok <- catch (load "token") (exceptionHandler flow)
+  tok <- fromFile "token"
   case tok of
     Nothing -> do
-             putStrLn "Possibly corrupt token file! Requesting a new one"
+             putStrLn "Requesting new tokens"
              requestTokens flow
     Just token -> return token
 

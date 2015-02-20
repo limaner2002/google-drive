@@ -1,6 +1,7 @@
 import OAuth2
 import Text.Printf
 import Token
+import File
 
 import Network.HTTP.Conduit
 import Network.HTTP.Types (hAuthorization)

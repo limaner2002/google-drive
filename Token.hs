@@ -27,11 +27,6 @@ save fileName tok = BL.writeFile fileName encoded
     where
       encoded = Data.Aeson.encode tok
 
-load :: FilePath -> IO (Maybe Token)
-load fName = do
-  json <- BS.readFile fName
-  return (Data.Aeson.decodeStrict json :: Maybe Token)
-
 instance FromJSON Token where
     parseJSON (Object v) = Token <$>
                            v .: "access_token" <*>
