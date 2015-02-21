@@ -79,7 +79,13 @@ refreshTokens flow (Just oldToken) = do
                 ("grant_type", "refresh_token"),
                 ("refresh_token", fromJust $ refreshToken oldToken)
                ]
-  fromUrl (tokenUri flow) params
+
+  newToken <- fromUrl (tokenUri flow) params
+  passRefreshToken newToken oldToken
+
+passRefreshToken :: Maybe Token -> Token -> IO (Maybe Token)
+passRefreshToken Nothing _ = return Nothing
+passRefreshToken (Just newToken) oldToken = return $ Just $ newToken { refreshToken = refreshToken oldToken }
 
 requestTokens :: OAuth2WebServerFlow -> IO (Maybe Token)
 requestTokens flow = do

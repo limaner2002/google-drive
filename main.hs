@@ -34,7 +34,7 @@ main = do
   else
       putStrLn "Continuing as usual."
 
-  L8.putStrLn $ responseBody response
+  L8.writeFile "/tmp/files.json" $ responseBody response
   putStrLn "Done!"
  where
    authorize (Just token) request = request
