@@ -45,9 +45,10 @@ fromUrl :: (FromJSON a) => String -> [(C8.ByteString, String)] -> IO (Maybe a)
 fromUrl url params = do
   request <- parseUrl url
 
-  let request' = urlEncodedBody (map (second C8.pack) params) request
+  fromRequest $ urlEncodedBody (map (second C8.pack) params) request
 
-  (fmap responseBody . withManager . httpLbs $ request') `catch` urlExceptionHandler >>= getL
+fromRequest :: (FromJSON a) => Request -> IO (Maybe a)
+fromRequest request = (fmap responseBody . withManager . httpLbs $ request) `catch` urlExceptionHandler >>= getL
 
 urlExceptionHandler :: HttpException -> IO (BL.ByteString)
 urlExceptionHandler err = do

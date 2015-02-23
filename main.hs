@@ -10,6 +10,7 @@ import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Lazy.Char8 as L8
 import Control.Exception
 import Data.Default (def)
+import Util
 
 checkStatus200 st@(Status sc _) rh cj = do
   if (200 <= sc && sc < 300) || sc == 404 || sc == 401
@@ -24,17 +25,20 @@ main = do
 
   request <- parseUrl "https://www.googleapis.com/drive/v2/files"
   let request' = request { checkStatus = checkStatus200 }
-  response <- withManager $ httpLbs $ authorize accessToken request'
-  let status = statusCode . responseStatus $ response
-  if status == 401
-  then do
-      putStrLn "Refreshing token now"
-      newToken <- refreshTokens webFlow accessToken
-      save "token" newToken
-  else
-      putStrLn "Continuing as usual."
+  (fromRequest $ authorize accessToken request') >>= printFiles
+  -- response <- withManager $ httpLbs $ authorize accessToken request'
+  -- let status = statusCode . responseStatus $ response
+  -- if status == 401
+  -- then do
+  --     putStrLn "Refreshing token now"
+  --     newToken <- refreshTokens webFlow accessToken
+  --     save "token" newToken
+  -- else
+  --     putStrLn "Continuing as usual."
 
-  L8.writeFile "/tmp/files.json" $ responseBody response
+  -- putStrLn "Writing to /tmp/files.json"
+  -- -- L8.writeFile "/tmp/files.json" $ responseBody response
+  -- L8.putStrLn (responseBody response)
   putStrLn "Done!"
  where
    authorize (Just token) request = request
