@@ -2,7 +2,8 @@
 module File
     ( File,
       FileList,
-      printFiles
+      printFiles,
+      getFileList
     )
     where
 
@@ -13,6 +14,14 @@ import Control.Monad (mzero, void)
 import qualified Data.ByteString.Lazy as BL
 import Text.PrettyPrint.Boxes
 import Data.List
+import Token
+import OAuth2
+import Util
+import qualified Data.ByteString.Char8 as B8
+import Network.HTTP.Conduit
+import Network.HTTP.Types (hAuthorization)
+import Network.HTTP.Types.Status (Status(..))
+
 
 data File = File
           { name :: String,
@@ -56,3 +65,26 @@ printFiles_ (FileList (f:fs)) = [name f, mimeType f]:printFiles_ (FileList fs)
 printFiles :: Maybe FileList -> IO ()
 printFiles Nothing = putStrLn "Nothing"
 printFiles (Just fl) = printTable $ printFiles_ fl
+
+getFileList :: Maybe Token -> OAuth2WebServerFlow -> IO (Maybe FileList)
+getFileList Nothing _ = return Nothing
+getFileList (Just token) webFlow = do
+  request <- parseUrl "https://www.googleapis.com/drive/v2/files"
+  (files, status) <- fromRequest $ authorize token request
+                     
+  if statusCode status == 401
+  then do
+      putStrLn "Refreshing token now"
+      newToken <- refreshTokens webFlow (Just token)
+      save "token" newToken
+      (files', status') <- fromRequest $ authorize token request
+      return files'
+  else
+      return files
+
+ where
+   authorize token request = request
+                             {
+                               requestHeaders = [(hAuthorization, B8.pack $ "Bearer " ++ accessToken token)]
+                             }
+

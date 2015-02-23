@@ -81,7 +81,7 @@ refreshTokens flow (Just oldToken) = do
                ]
 
   newToken <- fromUrl (tokenUri flow) params
-  passRefreshToken newToken oldToken
+  passRefreshToken (fst newToken) oldToken
 
 passRefreshToken :: Maybe Token -> Token -> IO (Maybe Token)
 passRefreshToken Nothing _ = return Nothing
@@ -104,7 +104,8 @@ requestTokens flow = do
                 ("code", authCode)
                ]
 
-  fromUrl (tokenUri flow) params
+  result <- fromUrl (tokenUri flow) params
+  return $ fst result
 
 instance Show OAuth2WebServerFlow
     where

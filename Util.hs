@@ -10,6 +10,7 @@ import System.IO
 import Control.Exception
 import Control.Arrow (second)
 import Network.HTTP.Conduit
+import Network.HTTP.Types.Status (Status(..))
 import qualified Data.ByteString.Char8 as C8
 
 getL :: (FromJSON a) => BL.ByteString -> IO (Maybe a)
@@ -41,23 +42,28 @@ fromFile :: (FromJSON a) => FilePath -> IO (Maybe a)
 fromFile fName = BS.readFile fName `catch` exceptHandler >>= get
 
 -- Reads and decodes a JSON object from a web url.
-fromUrl :: (FromJSON a) => String -> [(C8.ByteString, String)] -> IO (Maybe a)
+fromUrl :: (FromJSON a) => String -> [(C8.ByteString, String)] -> IO (Maybe a, Status)
 fromUrl url params = do
   request <- parseUrl url
 
   fromRequest $ urlEncodedBody (map (second C8.pack) params) request
 
-fromRequest :: (FromJSON a) => Request -> IO (Maybe a)
-fromRequest request = (fmap responseBody . withManager . httpLbs $ request) `catch` urlExceptionHandler >>= getL
+fromRequest :: (FromJSON a) => Request -> IO (Maybe a, Status)
+fromRequest request = do
+  (fmap (\x -> (responseBody x, responseStatus x)) . withManager . httpLbs $ request)
+  `catch` urlExceptionHandler
+              >>= (\(json, status) -> do
+                                      object <- getL json
+                                      return (object, status))
 
-urlExceptionHandler :: HttpException -> IO (BL.ByteString)
+urlExceptionHandler :: HttpException -> IO (BL.ByteString, Status)
 urlExceptionHandler err = do
-  hPutStrLn stderr "Error when fetching JSON"
+  hPutStrLn stderr "Error when fetching JSON from url"
   hPutStrLn stderr $ show err
-  return ""
+  return ("", Status 400 "Exception occurred!")
 
 exceptHandler :: (Data.String.IsString a) => SomeException -> IO a
 exceptHandler err = do
-  hPutStrLn stderr "Error when reading JSON"
+  hPutStrLn stderr "Error when reading JSON file"
   hPutStrLn stderr $ show err
   return ""
