@@ -16,8 +16,12 @@ import Foreign.C
 import Foreign.C.String
 import Foreign.Ptr (Ptr,nullPtr)
 
+import System.IO
+
 foreign import ccall "StorePasswordKeychain" c_StorePasswordKeychain :: Ptr CChar -> Int -> Ptr CChar ->
                                                                         Int-> Ptr CChar -> Int -> Int
+foreign import ccall "GetPasswordKeychain" c_GetPasswordKeychain :: Ptr a -> CUInt -> Ptr a ->
+                                                                    CUInt -> CString
 
 data Token = Token
     { accessToken :: !String,
@@ -26,14 +30,17 @@ data Token = Token
       refreshToken :: Maybe String
     } deriving (Show)
 
-save :: FilePath -> Maybe Token -> IO ()
-save _ Nothing = putStrLn "Cannot save Nothing"
-save fileName (Just tok) = BL.writeFile fileName encoded
+save :: Maybe Token -> IO ()
+save Nothing = putStrLn "Cannot save Nothing"
+save (Just tok) = do
+  saveRefreshToken "My Google Drive" "MyDrive" (refreshToken tok)
+  BL.writeFile "token" encoded
     where
       encoded = Data.Aeson.encode tok
 
-save_ :: String -> String -> String -> IO ()
-save_ service account pass = do
+saveRefreshToken :: String -> String -> Maybe String -> IO ()
+saveRefreshToken _ _ Nothing = hPutStrLn stderr "No refresh token to save!"
+saveRefreshToken service account (Just pass) = do
   cService <- newCStringLen service
   cAccount <- newCStringLen account
   cPass <- newCStringLen pass
@@ -44,6 +51,23 @@ save_ service account pass = do
             (acct, acctlen) = cAccount
   putStrLn $ show result
 
+fromKeychain :: String -> String -> IO (Maybe String)
+fromKeychain service account = do
+  cService <- newCStringLen service
+  cAccount <- newCStringLen account
+  let result = c_GetPasswordKeychain svc (fromIntegral svclen) acct (fromIntegral acctlen)
+          where
+            (svc, svclen) = cService
+            (acct, acctlen) = cAccount
+  -- Convert from c-space to haskell space
+  checkResult result
+
+checkResult :: CString -> IO (Maybe String)
+checkResult c_str
+    | c_str == nullPtr = return Nothing
+    | otherwise = do
+                  result <- peekCString c_str
+                  return $ Just result
 
 instance FromJSON Token where
     parseJSON (Object v) = Token <$>
@@ -57,6 +81,5 @@ instance ToJSON Token where
     toJSON (Token accessToken expiration tokenType refreshToken) =
         object [ "access_token" .= accessToken,
                  "expires_in" .= expiration,
-                 "token_type" .= tokenType,
-                 "refresh_token" .= refreshToken
+                 "token_type" .= tokenType
                ]

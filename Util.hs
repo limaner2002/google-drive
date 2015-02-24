@@ -57,10 +57,10 @@ fromRequest request = do
                                       return (object, status))
 
 urlExceptionHandler :: HttpException -> IO (BL.ByteString, Status)
-urlExceptionHandler err = do
-  hPutStrLn stderr "Error when fetching JSON from url"
-  hPutStrLn stderr $ show err
-  return ("", Status 400 "Exception occurred!")
+urlExceptionHandler (StatusCodeException status _ _) = do
+  hPutStrLn stderr $ "Error when "++show (statusCode status)++" fetching JSON from url"
+  hPutStrLn stderr $ show $ statusMessage status
+  return ("", status)
 
 exceptHandler :: (Data.String.IsString a) => SomeException -> IO a
 exceptHandler err = do

@@ -7,7 +7,6 @@ main :: IO ()
 main = do
   webFlow <- createFlow "configuration" "authorization.txt"
   accessToken <- getTokens webFlow
-  save "token" accessToken
 
   files <- getFileList accessToken webFlow
 

@@ -70,20 +70,20 @@ getFileList :: Maybe Token -> OAuth2WebServerFlow -> IO (Maybe FileList)
 getFileList Nothing _ = return Nothing
 getFileList (Just token) webFlow = do
   request <- parseUrl "https://www.googleapis.com/drive/v2/files"
-  (files, status) <- fromRequest $ authorize token request
+  (files, status) <- fromRequest $ authorize (Just token) request
                      
   if statusCode status == 401
   then do
       putStrLn "Refreshing token now"
       newToken <- refreshTokens webFlow (Just token)
-      save "token" newToken
-      (files', status') <- fromRequest $ authorize token request
+      save newToken
+      (files', status') <- fromRequest $ authorize newToken request
       return files'
   else
       return files
 
  where
-   authorize token request = request
+   authorize (Just token) request = request
                              {
                                requestHeaders = [(hAuthorization, B8.pack $ "Bearer " ++ accessToken token)]
                              }

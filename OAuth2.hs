@@ -73,19 +73,26 @@ getTokens flow = do
 refreshTokens :: OAuth2WebServerFlow -> Maybe Token -> IO (Maybe Token)
 refreshTokens _ Nothing = return Nothing
 refreshTokens flow (Just oldToken) = do
+  refreshToken <- fromKeychain "My Google Drive" "MyDrive"
+  putStrLn "Refresh token is"
+  putStrLn $ show refreshToken
   let tok = token flow
   let params = [("client_id", clientId tok),
                 ("client_secret", clientSecret flow),
                 ("grant_type", "refresh_token"),
-                ("refresh_token", fromJust $ refreshToken oldToken)
+                ("refresh_token", fromJust $ refreshToken)
                ]
 
   newToken <- fromUrl (tokenUri flow) params
-  passRefreshToken (fst newToken) oldToken
+  passRefreshToken (fst newToken) refreshToken
 
-passRefreshToken :: Maybe Token -> Token -> IO (Maybe Token)
+passRefreshToken :: Maybe Token -> Maybe String -> IO (Maybe Token)
 passRefreshToken Nothing _ = return Nothing
-passRefreshToken (Just newToken) oldToken = return $ Just $ newToken { refreshToken = refreshToken oldToken }
+passRefreshToken _ Nothing = return Nothing
+passRefreshToken (Just newToken) refreshToken = do
+  let result = Just $ newToken { refreshToken = refreshToken}
+  save result
+  return result
 
 requestTokens :: OAuth2WebServerFlow -> IO (Maybe Token)
 requestTokens flow = do
@@ -105,6 +112,7 @@ requestTokens flow = do
                ]
 
   result <- fromUrl (tokenUri flow) params
+  save $ fst result
   return $ fst result
 
 instance Show OAuth2WebServerFlow
