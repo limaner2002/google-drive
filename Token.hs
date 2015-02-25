@@ -30,6 +30,8 @@ data Token = Token
       refreshToken :: Maybe String
     } deriving (Show)
 
+type PageToken = String
+
 save :: Maybe Token -> IO ()
 save Nothing = putStrLn "Cannot save Nothing"
 save (Just tok) = do

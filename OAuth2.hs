@@ -75,7 +75,7 @@ refreshTokens _ Nothing = return Nothing
 refreshTokens flow (Just oldToken) = do
   refreshToken <- fromKeychain "My Google Drive" "MyDrive"
   putStrLn "Refresh token is"
-  putStrLn $ show refreshToken
+
   let tok = token flow
   let params = [("client_id", clientId tok),
                 ("client_secret", clientSecret flow),
@@ -83,15 +83,15 @@ refreshTokens flow (Just oldToken) = do
                 ("refresh_token", fromJust $ refreshToken)
                ]
 
-  newToken <- fromUrl (tokenUri flow) params
-  passRefreshToken (fst newToken) refreshToken
+  -- newToken <- fromUrl (tokenUri flow) params
+  -- passRefreshToken (fst newToken) refreshToken
+  fromUrl (tokenUri flow) params >>= (\newToken -> return $ fst newToken)
 
 passRefreshToken :: Maybe Token -> Maybe String -> IO (Maybe Token)
 passRefreshToken Nothing _ = return Nothing
 passRefreshToken _ Nothing = return Nothing
 passRefreshToken (Just newToken) refreshToken = do
   let result = Just $ newToken { refreshToken = refreshToken}
-  save result
   return result
 
 requestTokens :: OAuth2WebServerFlow -> IO (Maybe Token)
