@@ -7,8 +7,10 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString as BS
 
 import Data.Aeson
+import Data.Aeson.Types
 import Control.Applicative ((<$>),(<*>))
 import Control.Monad (mzero, void)
+import Control.Monad.IO.Class (liftIO)
 import Data.Maybe
 
 import Foreign
@@ -18,6 +20,9 @@ import Foreign.Ptr (Ptr,nullPtr)
 
 import System.IO
 
+import Data.Time
+import Data.Time.Clock.POSIX
+
 foreign import ccall "StorePasswordKeychain" c_StorePasswordKeychain :: Ptr CChar -> Int -> Ptr CChar ->
                                                                         Int-> Ptr CChar -> Int -> Int
 foreign import ccall "GetPasswordKeychain" c_GetPasswordKeychain :: Ptr a -> CUInt -> Ptr a ->
@@ -25,9 +30,10 @@ foreign import ccall "GetPasswordKeychain" c_GetPasswordKeychain :: Ptr a -> CUI
 
 data Token = Token
     { accessToken :: !String,
-      expiration :: !Int,
+      expiresIn :: !Int,
       tokenType :: !String,
-      refreshToken :: Maybe String
+      refreshToken :: Maybe String,
+      expires :: Double         -- Represented by POSIXTime in seconds
     } deriving (Show)
 
 type PageToken = String
@@ -71,17 +77,38 @@ checkResult c_str
                   result <- peekCString c_str
                   return $ Just result
 
+decodeToken :: Maybe Object -> IO (Maybe Token)
+decodeToken Nothing = return Nothing
+decodeToken (Just result) = do
+  let mt = flip parseMaybe result (\obj -> do
+                                               accessToken <- obj .: "access_token"
+                                               expiresIn <- obj .: "expires_in"
+                                               tokenType <- obj .: "token_type"
+                                               refreshToken <- obj .:? "refresh_token"
+                                               return $ Token accessToken
+                                                      expiresIn
+                                                      tokenType
+                                                      refreshToken
+                                                      0.0)
+  currentTime <- getPOSIXTime
+  return $ fmap (\x -> x { expires = expiration currentTime mt }) mt
+         where
+           expiration now (Just token) = (realToFrac now :: Double) + validity token
+           validity (token) = fromIntegral . expiresIn $ token
+
 instance FromJSON Token where
     parseJSON (Object v) = Token <$>
                            v .: "access_token" <*>
                            v .: "expires_in" <*>
                            v .: "token_type" <*>
-                           v .:? "refresh_token"
+                           v .:? "refresh_token" <*>
+                           v .:? "expires" .!= 0.0
     parseJSON _ = mzero
 
 instance ToJSON Token where
-    toJSON (Token accessToken expiration tokenType refreshToken) =
+    toJSON (Token accessToken expiresIn tokenType refreshToken expires) =
         object [ "access_token" .= accessToken,
-                 "expires_in" .= expiration,
-                 "token_type" .= tokenType
+                 "expires_in" .= expires,
+                 "token_type" .= tokenType,
+                 "expires" .= expires
                ]

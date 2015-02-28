@@ -83,9 +83,7 @@ refreshTokens flow (Just oldToken) = do
                 ("refresh_token", fromJust $ refreshToken)
                ]
 
-  -- newToken <- fromUrl (tokenUri flow) params
-  -- passRefreshToken (fst newToken) refreshToken
-  fromUrl (tokenUri flow) params >>= (\newToken -> return $ fst newToken)
+  fromUrl' (tokenUri flow) params >>= (\newToken -> return $ fst newToken)
 
 passRefreshToken :: Maybe Token -> Maybe String -> IO (Maybe Token)
 passRefreshToken Nothing _ = return Nothing
@@ -111,7 +109,7 @@ requestTokens flow = do
                 ("code", authCode)
                ]
 
-  result <- fromUrl (tokenUri flow) params
+  result <- fromUrl' (tokenUri flow) params
   save $ fst result
   return $ fst result
 

@@ -7,6 +7,7 @@ import Control.Concurrent
 import qualified Control.Exception as E
 import System.Exit
 import System.Posix.Signals (installHandler, Handler(Catch), sigINT, sigTERM)
+import Data.Maybe
 
 mainLoop :: IO ()
 mainLoop = do
@@ -24,9 +25,10 @@ main = do
   webFlow <- createFlow "configuration" "authorization.txt"
   accessToken <- getTokens webFlow
 
-  files <- getFileList accessToken webFlow
+  fileList <- getFileList accessToken webFlow
 
-  printFiles files
+  -- printFiles fileList
+  putStrLn $ show $ filter (\x -> name x == "Math") (files (fromJust fileList))
   tid <- myThreadId
   installHandler sigINT (Catch $ handler 0 tid) Nothing
   mainLoop

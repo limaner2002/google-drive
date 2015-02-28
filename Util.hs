@@ -13,6 +13,9 @@ import Network.HTTP.Conduit
 import Network.HTTP.Types.Status (Status(..))
 import qualified Data.ByteString.Char8 as C8
 
+-- Maybe can remove this and make tokenUrl more general?
+import Token 
+
 getL :: (FromJSON a) => BL.ByteString -> IO (Maybe a)
 getL "" = return Nothing
 getL string = do
@@ -67,3 +70,19 @@ exceptHandler err = do
   hPutStrLn stderr "Error when reading JSON file"
   hPutStrLn stderr $ show err
   return ""
+
+-- Reads and decodes a JSON object from a web url.
+fromUrl' :: String -> [(C8.ByteString, String)] -> IO (Maybe Token, Status)
+fromUrl' url params = do
+  request <- parseUrl url
+  (response, status) <- getResponse $ urlEncodedBody (map (second C8.pack) params) request
+  tok <- decodeToken (Data.Aeson.decode $ response)
+  return (tok, status)
+
+getResponse :: Request -> IO (BL.ByteString, Status)
+getResponse request =
+  (fmap (\x -> (responseBody x, responseStatus x)) . withManager . httpLbs $ request)
+  `catch` urlExceptionHandler
+
+tokenUrl :: BL.ByteString -> IO (Maybe Token)
+tokenUrl body = decodeToken (Data.Aeson.decode body)

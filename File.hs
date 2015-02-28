@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module File
-    ( File,
-      FileList,
+    ( File(..),
+      FileList(..),
       printFiles,
       getFileList
     )
@@ -82,7 +82,7 @@ getNextPages (Just token) (Just nextPageToken) url = do
   request <- parseUrl (url++"?pageToken="++nextPageToken)
   (files, _) <- fromRequest $ authorize token request
   next <- getNextPages (Just token) (files >>= nextPage) url
-  return files
+  return $ files `mappend` next
  where
    authorize token request = request
                              {
