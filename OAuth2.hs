@@ -12,6 +12,7 @@ import CSRFToken
 import Data.Monoid ((<>))
 import Data.List (intercalate)
 import Data.Maybe (fromJust)
+import Data.Time.Clock.POSIX (getPOSIXTime)
 import Network.HTTP.Base (urlEncode)
 import Token
 import Text.Printf
@@ -68,7 +69,16 @@ getTokens flow = do
     Nothing -> do
              putStrLn "Requesting new tokens"
              requestTokens flow
-    Just token -> return $ Just token
+    Just token -> do
+                   currentTime <- getPOSIXTime
+                   if expires token > (realToFrac currentTime :: Double)
+                   then return $ Just token
+                   else do
+                     putStrLn "Token has expired. Requesting a new one"
+                     putStrLn $ "now: "++(show (realToFrac currentTime :: Double))++" then: "++(show $ expires token)
+                     newToken <- refreshTokens flow tok
+                     save newToken
+                     return newToken
 
 refreshTokens :: OAuth2WebServerFlow -> Maybe Token -> IO (Maybe Token)
 refreshTokens _ Nothing = return Nothing

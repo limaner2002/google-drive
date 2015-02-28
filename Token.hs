@@ -34,7 +34,7 @@ data Token = Token
       tokenType :: !String,
       refreshToken :: Maybe String,
       expires :: Double         -- Represented by POSIXTime in seconds
-    } deriving (Show)
+    } | Expired deriving (Show)
 
 type PageToken = String
 
@@ -108,7 +108,7 @@ instance FromJSON Token where
 instance ToJSON Token where
     toJSON (Token accessToken expiresIn tokenType refreshToken expires) =
         object [ "access_token" .= accessToken,
-                 "expires_in" .= expires,
+                 "expires_in" .= expiresIn,
                  "token_type" .= tokenType,
                  "expires" .= expires
                ]
