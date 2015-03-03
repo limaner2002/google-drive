@@ -8,6 +8,7 @@ module File
     where
 
 import Data.Aeson
+import Data.Aeson.Types
 import Control.Applicative ((<$>),(<*>))
 import Data.Maybe
 import Control.Monad (mzero, void)
@@ -23,10 +24,36 @@ import Network.HTTP.Types (hAuthorization)
 import Network.HTTP.Types.Status (Status(..))
 import Data.Monoid
 
+data Resource = Resource {
+      kind :: String,
+      id :: String,
+      selfLink :: String
+    } deriving Show
+
+instance FromJSON Resource
+    where
+      parseJSON (Object o) = Resource <$> o .: "kind" <*>
+                             o .: "id" <*>
+                             o .: "selfLink"
+      parseJSON _ = mzero
+
+data Parent = Parent
+            { parentResource :: Resource,
+              isRoot :: Bool
+            } deriving Show
+
+instance FromJSON Parent
+    where
+      parseJSON value = do
+        withObject "Parent" (\obj -> do
+         			     let isRoot = obj .: "isRoot"
+                                     Parent <$> (parseJSON value :: Parser Resource) <*> isRoot) value
+
 data File = File
-          { name :: String,
-            kind :: String,
-            mimeType :: String
+          { fileResource :: Resource,
+            name :: String,
+            mimeType :: String,
+            parents :: [Parent]
           }
 
 instance Show File
@@ -35,10 +62,11 @@ instance Show File
 
 instance FromJSON File
     where
-      parseJSON (Object o) = File <$> o .: "title" <*>
-                             o .: "kind" <*>
-                             o .: "mimeType"
-      parseJSON _ = mzero
+      parseJSON value = do
+        withObject "File" (\obj -> File <$> (parseJSON value :: Parser Resource) <*>
+                                   obj .: "title" <*>
+                                   obj .: "mimeType" <*>
+                                   obj .:? "parents" .!= []) value
 
 data FileList = FileList
     { files :: [File],
@@ -55,10 +83,6 @@ instance FromJSON FileList
       parseJSON (Object o) = FileList <$>
                              o .: "items" <*>
                              o .:? "nextPageToken"
-        -- do
-        -- files <- parseJSON =<< (o .: "items")
-        -- nextPage <- parseJSON =<< (o .:? "nextPageToken")
-        -- return $ FileList files nextPage
 
 instance Monoid FileList where
     mempty = FileList [] Nothing
@@ -69,7 +93,7 @@ printTable rows = printBox $ hsep 2 left (map (vcat left . map text) (transpose 
 
 printFiles_ :: FileList -> [[String]]
 printFiles_ (FileList [] _) = []
-printFiles_ (FileList (f:fs) next) = [name f, mimeType f]:printFiles_ (FileList fs next)
+printFiles_ (FileList (f:fs) next) = [name f, mimeType f, show $ map isRoot (parents f)]:printFiles_ (FileList fs next)
 
 printFiles :: Maybe FileList -> IO ()
 printFiles Nothing = putStrLn "Nothing"
@@ -106,7 +130,6 @@ getFileList token webFlow = do
       next <- getNextPages newToken (files' >>= nextPage) url
       return (files' `mappend` next)
   else do
-      -- (next, status') <- getNextPages token (files >>= nextPage) url
       getNextPages token (files >>= nextPage) url >>= (\x -> return $ files `mappend` x)
 
 

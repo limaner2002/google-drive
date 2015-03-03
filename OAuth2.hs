@@ -75,7 +75,6 @@ getTokens flow = do
                    then return $ Just token
                    else do
                      putStrLn "Token has expired. Requesting a new one"
-                     putStrLn $ "now: "++(show (realToFrac currentTime :: Double))++" then: "++(show $ expires token)
                      newToken <- refreshTokens flow tok
                      save newToken
                      return newToken

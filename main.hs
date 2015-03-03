@@ -27,8 +27,8 @@ main = do
 
   fileList <- getFileList accessToken webFlow
 
-  -- printFiles fileList
-  putStrLn $ show $ filter (\x -> name x == "Math") (files (fromJust fileList))
+  printFiles fileList
+  -- putStrLn $ show $ filter (\x -> name x == "Math") (files (fromJust fileList))
   tid <- myThreadId
   installHandler sigINT (Catch $ handler 0 tid) Nothing
   mainLoop
