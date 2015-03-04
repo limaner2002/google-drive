@@ -1,7 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 module File
-    ( File(..),
+    ( Resource(..),
+      File(..),
       FileList(..),
+      Parent(..),
       printFiles,
       getFileList
     )

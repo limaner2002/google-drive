@@ -9,6 +9,8 @@ import System.Exit
 import System.Posix.Signals (installHandler, Handler(Catch), sigINT, sigTERM)
 import Data.Maybe
 
+import Tree
+
 mainLoop :: IO ()
 mainLoop = do
   threadDelay 30000000
@@ -28,6 +30,7 @@ main = do
   fileList <- getFileList accessToken webFlow
 
   printFiles fileList
+  createDirectory $ fromJust fileList
   -- putStrLn $ show $ filter (\x -> name x == "Math") (files (fromJust fileList))
   tid <- myThreadId
   installHandler sigINT (Catch $ handler 0 tid) Nothing
