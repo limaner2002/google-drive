@@ -5,7 +5,8 @@ module File
       FileList(..),
       Parent(..),
       printFiles,
-      getFileList
+      getFileList,
+      getChange
     )
     where
 
@@ -28,28 +29,38 @@ import OAuth2
 import Util
 import Resource
 
+data ChangeItem = ChangeItem
+     { file :: File
+     }
+
+instance FromJSON ChangeItem
+    where
+      parseJSON (Object o) = ChangeItem <$> o.: "file"
+      parseJSON _ = mzero
+
 data Change = Change
-    { changeBase :: Resource,
-      fileId :: String,
-      deleted :: Bool,
-      modificationDate :: String,
-      file :: File
+    { items :: [ChangeItem]
     }
 
 instance FromJSON Change
     where
-      parseJSON value = do
-        withObject "Change" (\obj -> Change <$> (parseJSON value :: Parser Resource) <*>
-                                     obj .: "fileId" <*>
-                                     obj .: "deleted" <*>
-                                     obj .: "modificationDate" <*>
-                                     obj .: "file") value
+      parseJSON (Object o) = Change <$> o .: "items"
+      parseJSON _ = mzero
+
+instance Show Change
+    where
+      show change = foldl (++) "" changeMessages
+      	   where
+	     changeMessages = map (\x -> itemName x ++ " was changed by " ++ modifiedBy x ++ "\n") $ items change
+	     itemName = name . file
+	     modifiedBy = displayName . lastModifyingUser . file
 
 data File = File
           { fileResource :: Resource,
             name :: String,
             mimeType :: String,
-            parents :: [Parent]
+            parents :: [Parent],
+	    lastModifyingUser :: User
           }
 
 instance Show File
@@ -62,7 +73,8 @@ instance FromJSON File
         withObject "File" (\obj -> File <$> (parseJSON value :: Parser Resource) <*>
                                    obj .: "title" <*>
                                    obj .: "mimeType" <*>
-                                   obj .:? "parents" .!= []) value
+                                   obj .:? "parents" .!= [] <*>
+				   obj .: "lastModifyingUser") value
 
 data FileList = FileList
     { files :: [File],
@@ -135,3 +147,11 @@ getFileList token webFlow = do
                                requestHeaders = [(hAuthorization, B8.pack $ "Bearer " ++ accessToken token)]
                              }
    url = "https://www.googleapis.com/drive/v2/files"
+
+getChange :: Maybe Token -> OAuth2WebServerFlow -> Int -> IO (Maybe Change)
+getChange Nothing _ _ = return Nothing
+getChange (Just token) webFlow changeId = do
+  (result, status) <- fromAuthorizedUrl url [(hAuthorization, B8.pack $ "Bearer " ++ accessToken token)]
+  return result
+ where
+  url = "https://www.googleapis.com/drive/v2/changes?pageToken=" ++ (show changeId)

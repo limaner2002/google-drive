@@ -22,12 +22,13 @@ mainLoop lastChange webFlow accessToken = do
        Nothing -> error "Could not get information!"
        (Just info) -> do
 
-       	     	      let change = read (largestChangeId info) :: Int
-		      if change > lastChange
+       	     	      let changeId = read (largestChangeId info) :: Int
+		      if changeId > lastChange
 		      then do
 
-		      putStrLn "Something changed!"
-		      mainLoop change webFlow accessToken
+		      change <- getChange accessToken webFlow changeId
+		      putStrLn $ show change
+		      mainLoop changeId webFlow accessToken
 
 		      else mainLoop lastChange webFlow accessToken
 
