@@ -6,13 +6,16 @@ module File
       Parent(..),
       printFiles,
       getFileList,
-      getChange
+      getChange,
+      Change(..),
+      listChanges
     )
     where
 
 import Data.Aeson
 import Data.Aeson.Types
 import Control.Applicative ((<$>),(<*>))
+import Control.Arrow (second)
 import Data.Maybe
 import Control.Monad (mzero, void)
 import qualified Data.ByteString.Lazy as BL
@@ -39,21 +42,33 @@ instance FromJSON ChangeItem
       parseJSON _ = mzero
 
 data Change = Change
-    { items :: [ChangeItem]
+    { items :: [ChangeItem],
+      largestChangeId :: String,
+      nextPageToken :: Maybe PageToken
     }
 
 instance FromJSON Change
     where
-      parseJSON (Object o) = Change <$> o .: "items"
+      parseJSON (Object o) = Change <$> o .:? "items" .!= [] <*>
+      			     	    	o .: "largestChangeId" <*>
+					o .:? "nextPageToken"
       parseJSON _ = mzero
 
 instance Show Change
     where
-      show change = foldl (++) "" changeMessages
+      show change = foldl (++) "" $ changeMessages
       	   where
 	     changeMessages = map (\x -> itemName x ++ " was changed by " ++ modifiedBy x ++ "\n") $ items change
 	     itemName = name . file
 	     modifiedBy = displayName . lastModifyingUser . file
+
+instance Monoid Change where
+     mempty = Change [] "" Nothing
+     mappend (Change l lChangeId _) (Change r rChangeId _) = Change (l ++ r) (largest) Nothing
+     	     where
+		largest = show $ max lChange rChange
+		lChange = read lChangeId :: Int
+		rChange = read rChangeId :: Int
 
 data File = File
           { fileResource :: Resource,
@@ -158,3 +173,24 @@ getChange (Just token) webFlow changeId = do
  where
   url = "https://www.googleapis.com/drive/v2/changes?pageToken=" ++ (show changeId)
   flowManager = getManager webFlow
+
+listChanges :: Maybe Token -> OAuth2WebServerFlow -> Int -> Maybe PageToken -> IO (Maybe Change)
+listChanges Nothing _ _ _ = return Nothing
+listChanges mToken webFlow changeId Nothing = getChange mToken webFlow changeId
+listChanges (Just token) webFlow changeId (Just nextChangePageToken) = do
+  request <- parseUrl url
+
+  (change, status) <- fromRequest flowManager $ authorize token request
+  next <- listChanges (Just token) webFlow changeId (change >>= nextPageToken)
+  return $ change `mappend` next
+ where
+   flowManager = getManager webFlow
+   url = "https://www.googleapis.com/drive/v2/changes"
+   headers = [(hAuthorization, B8.pack $ "Bearer " ++ accessToken token)]
+   params = [("pageToken", nextChangePageToken),
+   	     ("startChangeId", show changeId)]
+   authorize token request =
+   	     urlEncodedBody (map (second B8.pack) params)$ request 
+	     		    	 	    	     	   {
+								requestHeaders = headers
+	     						   }

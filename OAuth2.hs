@@ -4,6 +4,7 @@ module OAuth2 (
                createFlow,
 	       endFlow,
                getTokens,
+	       checkToken,
                refreshTokens,
 	       getManager
               )
@@ -77,19 +78,22 @@ getAuthorizeUrl flow = request flow
 getTokens :: OAuth2WebServerFlow -> IO (Maybe Token)
 getTokens flow = do
   tok <- fromFile "token"
-  case tok of
-    Nothing -> do
-             putStrLn "Requesting new tokens"
-             requestTokens flow
-    Just token -> do
-                   currentTime <- getPOSIXTime
-                   if expires token > (realToFrac currentTime :: Double)
-                   then return $ Just token
-                   else do
-                     putStrLn "Token has expired. Requesting a new one"
-                     newToken <- refreshTokens flow tok
-                     save newToken
-                     return newToken
+  checkToken flow tok
+
+checkToken :: OAuth2WebServerFlow -> Maybe Token -> IO (Maybe Token)
+checkToken flow Nothing = do
+  putStrLn "Requesting new tokens"
+  requestTokens flow
+checkToken flow (Just token) = do
+  currentTime <- getPOSIXTime
+  if expires token > (realToFrac currentTime :: Double)
+  then return $ Just token
+  else do
+    putStrLn "Token has expired. Requesting a new one"
+    newToken <- refreshTokens flow (Just token)
+    save newToken
+    return newToken
+  
 
 refreshTokens :: OAuth2WebServerFlow -> Maybe Token -> IO (Maybe Token)
 refreshTokens _ Nothing = return Nothing

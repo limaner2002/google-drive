@@ -15,24 +15,31 @@ import Data.Maybe
 -- import Network.HTTP.Client (defaultManagerSettings)
 
 mainLoop :: Int -> OAuth2WebServerFlow -> Maybe Token -> IO ()
-mainLoop lastChange webFlow accessToken = do
+mainLoop lastChange webFlow tok = do
   threadDelay 30000000
   putStrLn "Looping back"
 
-  about <- getInformation accessToken webFlow
-  case about of
-       Nothing -> error "Could not get information!"
-       (Just info) -> do
+  accessToken <- checkToken webFlow tok
 
-       	     	      let changeId = read (largestChangeId info) :: Int
-		      if changeId > lastChange
+  change <- getChange accessToken webFlow lastChange
+  case change of
+       Nothing -> error "Could not get change information!"
+       (Just chg) -> do
+       	     	      let changeId = read (largestChangeId chg) :: Int
+		      if changeId >= lastChange
 		      then do
 
-		      change <- getChange accessToken webFlow changeId
-		      putStrLn $ show change
-		      mainLoop changeId webFlow accessToken
+		      -- change <- getChange accessToken webFlow (lastChange)
+		      changeList <- listChanges accessToken webFlow lastChange (change >>= nextPageToken) >>= checkChangeList
+		      putStrLn $ show changeList
+		      let largestChange = read (largestChangeId changeList) :: Int
+		      mainLoop (largestChange+1) webFlow accessToken
 
 		      else mainLoop lastChange webFlow accessToken
+
+checkChangeList :: Maybe Change -> IO Change
+checkChangeList Nothing = error "Something went wrong getting the change list."
+checkChangeList (Just change) = return change
 
 handler :: Int -> ThreadId -> OAuth2WebServerFlow -> IO ()
 handler sig tid webFlow = do
@@ -46,7 +53,6 @@ checkInfo (Just info) = info
 
 main :: IO ()
 main = do
---   manager <- newManager defaultManagerSettings
   webFlow <- createFlow "configuration" "authorization.txt" -- manager
   accessToken <- getTokens webFlow
 
@@ -58,4 +64,4 @@ main = do
 
   tid <- myThreadId
   installHandler sigINT (Catch $ handler 0 tid webFlow) Nothing
-  mainLoop (read $ largestChangeId $ checkInfo about) webFlow accessToken
+  mainLoop ((read (largestChange $ checkInfo about))+1) webFlow accessToken
