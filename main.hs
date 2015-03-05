@@ -3,6 +3,7 @@ import Text.Printf
 import Token
 import File
 import Resource
+import Tree
 
 import Control.Concurrent
 import qualified Control.Exception as E
@@ -10,7 +11,8 @@ import System.Exit
 import System.Posix.Signals (installHandler, Handler(Catch), sigINT, sigTERM)
 import Data.Maybe
 
-import Tree
+-- import Network.HTTP.Conduit (newManager)
+-- import Network.HTTP.Client (defaultManagerSettings)
 
 mainLoop :: Int -> OAuth2WebServerFlow -> Maybe Token -> IO ()
 mainLoop lastChange webFlow accessToken = do
@@ -32,9 +34,10 @@ mainLoop lastChange webFlow accessToken = do
 
 		      else mainLoop lastChange webFlow accessToken
 
-handler :: Int -> ThreadId -> IO ()
-handler sig tid = do
+handler :: Int -> ThreadId -> OAuth2WebServerFlow -> IO ()
+handler sig tid webFlow = do
   E.throwTo tid ExitSuccess
+  endFlow webFlow
   putStrLn "Goodbye"
 
 checkInfo :: Maybe About -> About
@@ -43,7 +46,8 @@ checkInfo (Just info) = info
 
 main :: IO ()
 main = do
-  webFlow <- createFlow "configuration" "authorization.txt"
+--   manager <- newManager defaultManagerSettings
+  webFlow <- createFlow "configuration" "authorization.txt" -- manager
   accessToken <- getTokens webFlow
 
   fileList <- getFileList accessToken webFlow
@@ -53,5 +57,5 @@ main = do
   putStrLn $ show about
 
   tid <- myThreadId
-  installHandler sigINT (Catch $ handler 0 tid) Nothing
+  installHandler sigINT (Catch $ handler 0 tid webFlow) Nothing
   mainLoop (read $ largestChangeId $ checkInfo about) webFlow accessToken

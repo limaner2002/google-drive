@@ -2,8 +2,10 @@
 module OAuth2 (
                OAuth2WebServerFlow,
                createFlow,
+	       endFlow,
                getTokens,
-               refreshTokens
+               refreshTokens,
+	       getManager
               )
     where
 
@@ -21,6 +23,7 @@ import Network.HTTP.Conduit -- the main module
 import ConfigFile
 import Control.Exception
 import Util
+-- import Network.HTTP.Client (defaultManagerSettings)
 
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as L8
@@ -36,11 +39,14 @@ data OAuth2WebServerFlow = OAuth2WebServerFlow
       tokenUri :: !String,
       revokeUri :: !String,
       loginHint :: !String,
-      deviceUri :: !String
+      deviceUri :: !String,
+      accessToken :: Maybe Token,
+      manager :: Manager
     }
 
 createFlow :: String -> String -> IO (OAuth2WebServerFlow)
 createFlow configFile authorizationFile = do
+  manager <- newManager conduitManagerSettings
   conf <- readConfig configFile
   authorization <- readConfig authorizationFile
 
@@ -57,7 +63,13 @@ createFlow configFile authorizationFile = do
 
   return $ OAuth2WebServerFlow (CSRFToken clientId "someState" "drive")
          clientSecret oauthScope redirectUri
-         userAgent authUri tokenUri revokeUri loginHint deviceUri
+         userAgent authUri tokenUri revokeUri loginHint deviceUri Nothing manager
+
+endFlow :: OAuth2WebServerFlow -> IO ()
+endFlow = closeManager . manager
+  
+getManager :: OAuth2WebServerFlow -> Manager
+getManager = manager
 
 getAuthorizeUrl :: OAuth2WebServerFlow -> String
 getAuthorizeUrl flow = request flow
@@ -92,7 +104,9 @@ refreshTokens flow (Just oldToken) = do
                 ("refresh_token", fromJust $ refreshToken)
                ]
 
-  fromUrl' (tokenUri flow) params >>= (\newToken -> return $ fst newToken)
+  fromUrl' flowManager (tokenUri flow) params >>= (\newToken -> return $ fst newToken)
+    where
+      flowManager = getManager flow
 
 passRefreshToken :: Maybe Token -> Maybe String -> IO (Maybe Token)
 passRefreshToken Nothing _ = return Nothing
@@ -118,9 +132,11 @@ requestTokens flow = do
                 ("code", authCode)
                ]
 
-  result <- fromUrl' (tokenUri flow) params
+  result <- fromUrl' flowManager (tokenUri flow) params
   save $ fst result
   return $ fst result
+ where
+   flowManager = getManager flow
 
 instance Show OAuth2WebServerFlow
     where

@@ -46,26 +46,26 @@ fromFile :: (FromJSON a) => FilePath -> IO (Maybe a)
 fromFile fName = BS.readFile fName `catch` exceptHandler >>= get
 
 -- Reads and decodes a JSON object from a web url.
-fromUrl :: (FromJSON a) => String -> [(C8.ByteString, String)] -> IO (Maybe a, Status)
-fromUrl url params = do
+fromUrl :: (FromJSON a) => Manager -> String -> [(C8.ByteString, String)] -> IO (Maybe a, Status)
+fromUrl manager url params = do
   request <- parseUrl url
 
-  fromRequest $ urlEncodedBody (map (second C8.pack) params) request
+  fromRequest manager $ urlEncodedBody (map (second C8.pack) params) request
 
-fromAuthorizedUrl :: (FromJSON a) => String -> [(HeaderName, C8.ByteString)] -> IO (Maybe a, Status)
-fromAuthorizedUrl url headers = do
+fromAuthorizedUrl :: (FromJSON a) => Manager -> String -> [(HeaderName, C8.ByteString)] -> IO (Maybe a, Status)
+fromAuthorizedUrl manager url headers = do
   request <- parseUrl url
 
-  fromRequest $ request { requestHeaders = headers }
+  fromRequest manager $ request { requestHeaders = headers }
 
-fromRequest :: (FromJSON a) => Request -> IO (Maybe a, Status)
-fromRequest request = do
-  (fmap (\x -> (responseBody x, responseStatus x)) . withManager . httpLbs $ request)
+fromRequest :: (FromJSON a) => Manager -> Request -> IO (Maybe a, Status)
+fromRequest manager request = do
+  (fmap (\x -> (responseBody x, responseStatus x)) $ httpLbs request manager)
   `catch` urlExceptionHandler
               >>= (\(json, status) -> do
                                       object <- getL json
                                       return (object, status))
-
+  
 urlExceptionHandler :: HttpException -> IO (BL.ByteString, Status)
 urlExceptionHandler (StatusCodeException status _ _) = do
   hPutStrLn stderr $ "Error when "++show (statusCode status)++" fetching JSON from url"
@@ -79,16 +79,16 @@ exceptHandler err = do
   return ""
 
 -- Reads and decodes a JSON object from a web url.
-fromUrl' :: String -> [(C8.ByteString, String)] -> IO (Maybe Token, Status)
-fromUrl' url params = do
+fromUrl' :: Manager -> String -> [(C8.ByteString, String)] -> IO (Maybe Token, Status)
+fromUrl' manager url params = do
   request <- parseUrl url
-  (response, status) <- getResponse $ urlEncodedBody (map (second C8.pack) params) request
+  (response, status) <- getResponse manager $ urlEncodedBody (map (second C8.pack) params) request
   tok <- decodeToken (Data.Aeson.decode $ response)
   return (tok, status)
 
-getResponse :: Request -> IO (BL.ByteString, Status)
-getResponse request =
-  (fmap (\x -> (responseBody x, responseStatus x)) . withManager . httpLbs $ request)
+getResponse :: Manager -> Request -> IO (BL.ByteString, Status)
+getResponse manager request =
+  (fmap (\x -> (responseBody x, responseStatus x)) $ httpLbs request manager)
   `catch` urlExceptionHandler
 
 tokenUrl :: BL.ByteString -> IO (Maybe Token)

@@ -107,25 +107,26 @@ printFiles :: Maybe FileList -> IO ()
 printFiles Nothing = putStrLn "Nothing"
 printFiles (Just fl) = printTable $ printFiles_ fl
 
-getNextPages :: Maybe Token -> Maybe PageToken -> String -> IO (Maybe FileList)
-getNextPages _ Nothing _ = return (Nothing)
-getNextPages Nothing _ _ = return (Nothing)
-getNextPages (Just token) (Just nextPageToken) url = do
+getNextPages :: OAuth2WebServerFlow -> Maybe Token -> Maybe PageToken -> String -> IO (Maybe FileList)
+getNextPages _ _ Nothing _ = return (Nothing)
+getNextPages _ Nothing _ _ = return (Nothing)
+getNextPages webFlow (Just token) (Just nextPageToken) url = do
   request <- parseUrl (url++"?pageToken="++nextPageToken)
-  (files, _) <- fromRequest $ authorize token request
-  next <- getNextPages (Just token) (files >>= nextPage) url
+  (files, _) <- fromRequest flowManager $ authorize token request
+  next <- getNextPages webFlow (Just token) (files >>= nextPage) url
   return $ files `mappend` next
  where
    authorize token request = request
                              {
                                requestHeaders = [(hAuthorization, B8.pack $ "Bearer " ++ accessToken token)]
                              }
+   flowManager = getManager webFlow
 
 getFileList :: Maybe Token -> OAuth2WebServerFlow -> IO (Maybe FileList)
 getFileList Nothing _ = return Nothing
 getFileList token webFlow = do
   request <- parseUrl url
-  (files, status) <- fromRequest $ authorize token request
+  (files, status) <- fromRequest flowManager $ authorize token request
                      
   if statusCode status == 401
   then do
@@ -134,11 +135,11 @@ getFileList token webFlow = do
       -- Change this so that it doesn't try saving the refresh token
       -- every time.
       save newToken
-      (files', _) <- fromRequest $ authorize newToken request
-      next <- getNextPages newToken (files' >>= nextPage) url
+      (files', _) <- fromRequest flowManager $ authorize newToken request
+      next <- getNextPages webFlow newToken (files' >>= nextPage) url
       return (files' `mappend` next)
   else do
-      getNextPages token (files >>= nextPage) url >>= (\x -> return $ files `mappend` x)
+      getNextPages webFlow token (files >>= nextPage) url >>= (\x -> return $ files `mappend` x)
 
 
  where
@@ -147,11 +148,13 @@ getFileList token webFlow = do
                                requestHeaders = [(hAuthorization, B8.pack $ "Bearer " ++ accessToken token)]
                              }
    url = "https://www.googleapis.com/drive/v2/files"
+   flowManager = getManager webFlow
 
 getChange :: Maybe Token -> OAuth2WebServerFlow -> Int -> IO (Maybe Change)
 getChange Nothing _ _ = return Nothing
 getChange (Just token) webFlow changeId = do
-  (result, status) <- fromAuthorizedUrl url [(hAuthorization, B8.pack $ "Bearer " ++ accessToken token)]
+  (result, status) <- fromAuthorizedUrl flowManager url [(hAuthorization, B8.pack $ "Bearer " ++ accessToken token)]
   return result
  where
   url = "https://www.googleapis.com/drive/v2/changes?pageToken=" ++ (show changeId)
+  flowManager = getManager webFlow
