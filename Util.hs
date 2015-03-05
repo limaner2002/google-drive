@@ -10,6 +10,7 @@ import System.IO
 import Control.Exception
 import Control.Arrow (second)
 import Network.HTTP.Conduit
+import Network.HTTP.Types (HeaderName)
 import Network.HTTP.Types.Status (Status(..))
 import qualified Data.ByteString.Char8 as C8
 
@@ -50,6 +51,12 @@ fromUrl url params = do
   request <- parseUrl url
 
   fromRequest $ urlEncodedBody (map (second C8.pack) params) request
+
+fromAuthorizedUrl :: (FromJSON a) => String -> [(HeaderName, C8.ByteString)] -> IO (Maybe a, Status)
+fromAuthorizedUrl url headers = do
+  request <- parseUrl url
+
+  fromRequest $ request { requestHeaders = headers }
 
 fromRequest :: (FromJSON a) => Request -> IO (Maybe a, Status)
 fromRequest request = do

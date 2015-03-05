@@ -14,7 +14,7 @@ data Rec a = Rec
     { recId :: String,
       parentId :: Maybe String,
       value :: a
-    } deriving Show
+    }
 
 toTree :: [Rec a] -> [T.Tree a]
 toTree rs = ts

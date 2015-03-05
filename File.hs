@@ -16,40 +16,34 @@ import Data.Maybe
 import Control.Monad (mzero, void)
 import qualified Data.ByteString.Lazy as BL
 import Text.PrettyPrint.Boxes
-import Data.List
-import Token
-import OAuth2
-import Util
 import qualified Data.ByteString.Char8 as B8
 import Network.HTTP.Conduit
 import Network.HTTP.Types (hAuthorization)
 import Network.HTTP.Types.Status (Status(..))
 import Data.Monoid
+import Data.List
 
-data Resource = Resource {
-      kind :: String,
-      id :: String,
-      selfLink :: String
-    } deriving Show
+import Token
+import OAuth2
+import Util
+import Resource
 
-instance FromJSON Resource
-    where
-      parseJSON (Object o) = Resource <$> o .: "kind" <*>
-                             o .: "id" <*>
-                             o .: "selfLink"
-      parseJSON _ = mzero
+data Change = Change
+    { changeBase :: Resource,
+      fileId :: String,
+      deleted :: Bool,
+      modificationDate :: String,
+      file :: File
+    }
 
-data Parent = Parent
-            { parentResource :: Resource,
-              isRoot :: Bool
-            } deriving Show
-
-instance FromJSON Parent
+instance FromJSON Change
     where
       parseJSON value = do
-        withObject "Parent" (\obj -> do
-         			     let isRoot = obj .: "isRoot"
-                                     Parent <$> (parseJSON value :: Parser Resource) <*> isRoot) value
+        withObject "Change" (\obj -> Change <$> (parseJSON value :: Parser Resource) <*>
+                                     obj .: "fileId" <*>
+                                     obj .: "deleted" <*>
+                                     obj .: "modificationDate" <*>
+                                     obj .: "file") value
 
 data File = File
           { fileResource :: Resource,
