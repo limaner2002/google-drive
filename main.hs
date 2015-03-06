@@ -17,7 +17,6 @@ import Data.Maybe
 mainLoop :: Int -> OAuth2WebServerFlow -> Maybe Token -> IO ()
 mainLoop lastChange webFlow tok = do
   threadDelay 30000000
-  putStrLn "Looping back"
 
   accessToken <- checkToken webFlow tok
 

@@ -24,6 +24,7 @@ getL string = do
     case result of
       Nothing -> do
                   hPutStrLn stderr $ "Could not parse JSON!"
+		  BL.writeFile "/tmp/log.json" string
                   return Nothing
       Just a -> return a
 
@@ -34,6 +35,7 @@ get string = do
     case result of
       Nothing -> do
                   hPutStrLn stderr $ "Could not parse JSON!"
+		  BS.writeFile "/tmp/log.json" string
                   return Nothing
       Just a -> return a
       
