@@ -12,11 +12,16 @@ module OAuth2 (
 
 import URI
 import CSRFToken
+import Data.Aeson
+import Data.Maybe
 import Data.Monoid ((<>))
 import Data.List (intercalate)
 import Data.Maybe (fromJust)
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import Network.HTTP.Base (urlEncode)
+import Network.HTTP.Types (hAuthorization)
+import Network.HTTP.Types.Status (Status(..))
+import Network.HTTP.Conduit
 import Token
 import Text.Printf
 import System.IO (hFlush, stdout)
@@ -28,7 +33,7 @@ import Util
 
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as L8
-
+import qualified Data.ByteString.Char8 as C8
 
 data OAuth2WebServerFlow = OAuth2WebServerFlow
     { token :: !CSRFToken,
@@ -154,5 +159,14 @@ instance URI OAuth2WebServerFlow
                     <>"&response_type=code"
                     <>"&client_id="<>clientId (token flow)
 
+authorizedRequest :: (FromJSON a) => OAuth2WebServerFlow -> String -> IO (Maybe a, Status)
+authorizedRequest flow url = do
+  request <- parseUrl url
 
+  validToken <- checkToken $ OAuth2.accessToken flow
 
+  fromRequest flowManager $ request { requestHeaders = headers validToken }
+ where
+   flowManager = manager flow
+   headers token = [(hAuthorization, C8.pack $ "Bearer " ++ (fromMaybe "" tokenString))]
+   tokenString = fmap (OAuth2.accessToken flow) Token.accessToken

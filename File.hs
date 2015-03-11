@@ -33,12 +33,14 @@ import Util
 import Resource
 
 data ChangeItem = ChangeItem
-     { file :: Maybe File
+     { file :: Maybe File,
+       modificationDate :: String
      }
 
 instance FromJSON ChangeItem
     where
-      parseJSON (Object o) = ChangeItem <$> o .:? "file"
+      parseJSON (Object o) = ChangeItem <$> o .:? "file" <*>
+      			     		    o .: "modificationDate"
       parseJSON _ = mzero
 
 data Change = Change
@@ -58,9 +60,10 @@ instance Show Change
     where
       show change = foldl (++) "" $ changeMessages
       	   where
-	     changeMessages = map (\x -> itemName x ++ " was changed by " ++ modifiedBy x ++ "\n") $ items change
+	     changeMessages = map (\x -> itemName x ++ " was changed by " ++ modifiedBy x ++ " at " ++ time x ++ " \n") $ items change
 	     itemName item = show $ fmap (name) $ file item
 	     modifiedBy item = show $ fmap (displayName . lastModifyingUser) $ file item
+	     time = modificationDate
 
 instance Monoid Change where
      mempty = Change [] "" Nothing
