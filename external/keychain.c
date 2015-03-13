@@ -19,9 +19,6 @@ int StorePasswordKeychain (void* serviceName, UInt32 serviceNameLength,
   					  password,           // pointer to password data
   					  NULL                // the item reference
   					  );
-  free(serviceName);
-  free(accountName);
-  free(password);
   return status;
 }
 
@@ -57,7 +54,11 @@ char* GetPasswordKeychain (void* serviceName, UInt32 serviceNameLength,
 					NULL,
 					password);
   }
-  free(serviceName);
-  free(accountName);
+
   return result;
+}
+
+void ffree(char *ptr){
+  printf("Freeing pointer at %p\n", ptr);
+  free(ptr);
 }

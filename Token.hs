@@ -19,6 +19,7 @@ import Foreign.C
 import Foreign.C.String
 import Foreign.Ptr (Ptr,nullPtr)
 import Foreign.Marshal.Alloc (free)
+import Foreign.ForeignPtr.Safe
 
 import System.IO
 
@@ -29,6 +30,7 @@ foreign import ccall "StorePasswordKeychain" c_StorePasswordKeychain :: Ptr CCha
                                                                         Int-> Ptr CChar -> Int -> Int
 foreign import ccall "GetPasswordKeychain" c_GetPasswordKeychain :: Ptr a -> CUInt -> Ptr a ->
                                                                     CUInt -> CString
+foreign import ccall "&ffree" ffree :: FunPtr (CString -> IO())
 
 data Token = Token
     { accessToken :: !String,
@@ -54,6 +56,11 @@ saveRefreshToken service account (Just pass) = do
   cService <- newCStringLen service
   cAccount <- newCStringLen account
   cPass <- newCStringLen pass
+
+  newForeignPtr ffree (fst cService)
+  newForeignPtr ffree (fst cAccount)
+  newForeignPtr ffree (fst cPass)
+
   let result = c_StorePasswordKeychain svc svclen acct acctlen passwd passlen
           where
             (passwd, passlen) = cPass
@@ -66,10 +73,16 @@ fromKeychain :: String -> String -> IO (Maybe String)
 fromKeychain service account = do
   cService <- newCStringLen service
   cAccount <- newCStringLen account
+
+  newForeignPtr ffree (fst cService)
+  newForeignPtr ffree (fst cAccount)
+
   let result = c_GetPasswordKeychain svc (fromIntegral svclen) acct (fromIntegral acctlen)
           where
             (svc, svclen) = cService
             (acct, acctlen) = cAccount
+  newForeignPtr ffree result
+
   -- Convert from c-space to haskell space
   checkResult result
 
@@ -78,7 +91,6 @@ checkResult c_str
     | c_str == nullPtr = return Nothing
     | otherwise = do
                   result <- peekCString c_str
-		  free c_str
                   return $ Just result
 
 decodeToken :: Maybe Object -> IO (Maybe Token)
