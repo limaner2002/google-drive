@@ -11,12 +11,14 @@ import Data.Aeson.Types
 import Control.Applicative ((<$>),(<*>))
 import Control.Monad (mzero, void)
 import Control.Monad.IO.Class (liftIO)
+import Control.Seq
 import Data.Maybe
 
 import Foreign
 import Foreign.C
 import Foreign.C.String
 import Foreign.Ptr (Ptr,nullPtr)
+import Foreign.Marshal.Alloc (free)
 
 import System.IO
 
@@ -57,6 +59,7 @@ saveRefreshToken service account (Just pass) = do
             (passwd, passlen) = cPass
             (svc, svclen) = cService
             (acct, acctlen) = cAccount
+
   putStrLn $ show result
 
 fromKeychain :: String -> String -> IO (Maybe String)
@@ -75,6 +78,7 @@ checkResult c_str
     | c_str == nullPtr = return Nothing
     | otherwise = do
                   result <- peekCString c_str
+		  free c_str
                   return $ Just result
 
 decodeToken :: Maybe Object -> IO (Maybe Token)

@@ -16,7 +16,6 @@ import Data.Maybe
 mainLoop :: Int -> Flow ()
 mainLoop lastChange = do
   liftIO $ threadDelay 30000000
-  liftIO $ putStrLn "Looping"
   checkToken'
   webFlow <- get
 
@@ -59,17 +58,6 @@ main = do
   tid <- myThreadId
   installHandler sigINT (Catch $ handler 0 tid webFlow) Nothing
 
---   accessToken <- getTokens webFlow
-
---   fileList <- getFileList accessToken webFlow
---   createDirectory $ fromJust fileList
-
---   about <- getInformation accessToken webFlow
---   putStrLn $ show about
-
---   tid <- myThreadId
---   installHandler sigINT (Catch $ handler 0 tid webFlow) Nothing
---   let lastChange = (read (largestChange $ checkInfo about)) + 1
   let t = evalStateT . runExceptT $ start
   retVal <- t webFlow
   putStrLn $ show retVal
