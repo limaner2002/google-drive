@@ -5,8 +5,11 @@ module OAuth2 (
 	       endFlow,
                getTokens,
 	       checkToken,
+	       checkToken',
                refreshTokens,
-	       getManager
+	       getManager,
+	       Flow,
+	       getAuthToken
               )
     where
 
@@ -28,6 +31,8 @@ import System.IO (hFlush, stdout)
 import Network.HTTP.Conduit -- the main module
 import ConfigFile
 import Control.Exception
+import Control.Monad.Except
+import Control.Monad.State
 import Util
 -- import Network.HTTP.Client (defaultManagerSettings)
 
@@ -49,6 +54,8 @@ data OAuth2WebServerFlow = OAuth2WebServerFlow
       accessToken :: Maybe Token,
       manager :: Manager
     }
+
+type Flow = ExceptT String (StateT OAuth2WebServerFlow IO)
 
 createFlow :: String -> String -> IO (OAuth2WebServerFlow)
 createFlow configFile authorizationFile = do
@@ -80,10 +87,17 @@ getManager = manager
 getAuthorizeUrl :: OAuth2WebServerFlow -> String
 getAuthorizeUrl flow = request flow
 
-getTokens :: OAuth2WebServerFlow -> IO (Maybe Token)
-getTokens flow = do
-  tok <- fromFile "token"
-  checkToken flow tok
+getTokens :: Flow ()
+getTokens = do
+  webFlow <- get
+  tok <- liftIO $ fromFile "token"
+  case tok of
+       Nothing -> do
+       	       liftIO $ putStrLn "Requesting new tokens"
+	       requestTokens'
+       Just token -> do
+       	    put $ webFlow {OAuth2.accessToken = token}
+	    checkToken'
 
 checkToken :: OAuth2WebServerFlow -> Maybe Token -> IO (Maybe Token)
 checkToken flow Nothing = do
@@ -98,7 +112,20 @@ checkToken flow (Just token) = do
     newToken <- refreshTokens flow (Just token)
     save newToken
     return newToken
-  
+
+checkToken' :: Flow ()
+checkToken' = do
+	   webFlow <- get
+	   token <- liftIO $ getAuthToken webFlow
+	   let expiration = expires token
+	   currentTime <- liftIO getPOSIXTime
+	   if expiration-60 > (realToFrac currentTime :: Double)
+	   then put webFlow
+	   else do
+	   	liftIO $ putStrLn "Token has expired. Requesting a new one"
+		newToken <- liftIO $ refreshTokens webFlow (Just token)
+		liftIO $ save newToken
+		put $ webFlow { OAuth2.accessToken = newToken }
 
 refreshTokens :: OAuth2WebServerFlow -> Maybe Token -> IO (Maybe Token)
 refreshTokens _ Nothing = return Nothing
@@ -147,6 +174,30 @@ requestTokens flow = do
  where
    flowManager = getManager flow
 
+requestTokens' :: Flow ()
+requestTokens' = do
+  webFlow <- get
+  let tok = token webFlow
+  let flowManager = getManager webFlow
+
+  liftIO $ printf "\nVisit the following URL to retreive a verification code:\n\n"
+  liftIO $ printf "%s\n\n" $ getAuthorizeUrl webFlow
+  liftIO $ printf "Verification code: "
+  liftIO $ hFlush stdout
+
+  authCode <- liftIO $ getLine
+
+  let params = [("client_id", clientId tok),
+                ("client_secret", clientSecret webFlow),
+                ("grant_type", "authorization_code"),
+                ("redirect_uri", redirectUri webFlow),
+                ("code", authCode)
+               ]
+
+  (result, status) <- liftIO $ fromUrl' flowManager (tokenUri webFlow) params
+  liftIO $ save $ result
+  put $ webFlow { OAuth2.accessToken = result }  
+
 instance Show OAuth2WebServerFlow
     where
       show oauth = show $ clientId $ token oauth
@@ -159,14 +210,9 @@ instance URI OAuth2WebServerFlow
                     <>"&response_type=code"
                     <>"&client_id="<>clientId (token flow)
 
-authorizedRequest :: (FromJSON a) => OAuth2WebServerFlow -> String -> IO (Maybe a, Status)
-authorizedRequest flow url = do
-  request <- parseUrl url
-
-  validToken <- checkToken $ OAuth2.accessToken flow
-
-  fromRequest flowManager $ request { requestHeaders = headers validToken }
- where
-   flowManager = manager flow
-   headers token = [(hAuthorization, C8.pack $ "Bearer " ++ (fromMaybe "" tokenString))]
-   tokenString = fmap (OAuth2.accessToken flow) Token.accessToken
+getAuthToken :: OAuth2WebServerFlow -> IO (Token)
+getAuthToken flow = do
+	       let tok = OAuth2.accessToken flow
+	       case tok of
+	       	    Nothing -> error "Invalid token for some reason."
+		    Just token -> return token

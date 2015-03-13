@@ -8,6 +8,8 @@ import Control.Monad (mzero, void)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Char8 as C8
 import Network.HTTP.Types (hAuthorization)
+import Control.Monad.State
+import Control.Monad.Except
 
 import Token
 import OAuth2
@@ -82,11 +84,14 @@ instance FromJSON User
                              o .: "emailAddress"
       parseJSON _ = mzero
 
-getInformation :: Maybe Token -> OAuth2WebServerFlow -> IO (Maybe About)
-getInformation Nothing _ = return Nothing
-getInformation (Just token) webFlow = do
-  (result, status) <- fromAuthorizedUrl flowManager url [(hAuthorization, C8.pack $ "Bearer " ++ accessToken token)]
-  return result
- where
-   url = "https://www.googleapis.com/drive/v2/about"
-   flowManager = getManager webFlow
+getInformation :: Flow About
+getInformation = do
+  webFlow <- get
+  let flowManager = getManager webFlow
+  let url = "https://www.googleapis.com/drive/v2/about"
+  tok <- liftIO $ getAuthToken webFlow
+
+  (result, status) <- liftIO $ fromAuthorizedUrl flowManager url [(hAuthorization, C8.pack $ "Bearer " ++ accessToken tok)]
+  case result of
+       Nothing -> throwError $ "Could not get drive information.\nAccess Token: " ++ show tok
+       Just about -> return about

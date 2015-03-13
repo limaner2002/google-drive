@@ -5,7 +5,7 @@ module File
       FileList(..),
       Parent(..),
       printFiles,
-      getFileList,
+      listFiles,
       getChange,
       Change(..),
       listChanges
@@ -16,7 +16,7 @@ import Data.Aeson
 import Data.Aeson.Types
 import Control.Applicative ((<$>),(<*>))
 import Control.Arrow (second)
-import Data.Maybe
+-- import Data.Maybe
 import Control.Monad (mzero, void)
 import qualified Data.ByteString.Lazy as BL
 import Text.PrettyPrint.Boxes
@@ -26,6 +26,8 @@ import Network.HTTP.Types (hAuthorization)
 import Network.HTTP.Types.Status (Status(..))
 import Data.Monoid
 import Data.List
+import Control.Monad.Except
+import Control.Monad.State
 
 import Token
 import OAuth2
@@ -125,75 +127,77 @@ printFiles :: Maybe FileList -> IO ()
 printFiles Nothing = putStrLn "Nothing"
 printFiles (Just fl) = printTable $ printFiles_ fl
 
-getNextPages :: OAuth2WebServerFlow -> Maybe Token -> Maybe PageToken -> String -> IO (Maybe FileList)
-getNextPages _ _ Nothing _ = return (Nothing)
-getNextPages _ Nothing _ _ = return (Nothing)
-getNextPages webFlow (Just token) (Just nextPageToken) url = do
-  request <- parseUrl (url++"?pageToken="++nextPageToken)
-  (files, _) <- fromRequest flowManager $ authorize token request
-  next <- getNextPages webFlow (Just token) (files >>= nextPage) url
+listFiles :: Maybe PageToken -> Flow FileList
+listFiles Nothing = return $ FileList [] Nothing
+listFiles (Just []) = do
+  files <- getFileList "https://www.googleapis.com/drive/v2/files"
+  next <- listFiles (nextPage files)
   return $ files `mappend` next
+
+listFiles (Just nextPageToken) = do
+  files <- getFileList ("https://www.googleapis.com/drive/v2/files?pageToken="++nextPageToken)
+  next <- listFiles (nextPage files)
+  return $ files `mappend` next
+--  where
+--    authorize token request = request
+--                              {
+--                                requestHeaders = [(hAuthorization, B8.pack $ "Bearer " ++ accessToken token)]
+--                              }
+
+
+getFileList :: String -> Flow FileList
+getFileList url = do
+  webFlow <- get
+  let flowManager = getManager webFlow
+  token <- liftIO $ getAuthToken webFlow
+
+  request <- parseUrl url
+  (files, status) <- liftIO $ fromRequest flowManager $ authorize token request
+
+  case files of
+       Nothing -> throwError "Could not get list of files!"
+       Just list -> return list
+--   getNextPages webFlow token (files >>= nextPage) url >>= (\x -> return $ files `mappend` x)
+
  where
    authorize token request = request
                              {
                                requestHeaders = [(hAuthorization, B8.pack $ "Bearer " ++ accessToken token)]
                              }
-   flowManager = getManager webFlow
 
-getFileList :: Maybe Token -> OAuth2WebServerFlow -> IO (Maybe FileList)
-getFileList Nothing _ = return Nothing
-getFileList token webFlow = do
-  request <- parseUrl url
-  (files, status) <- fromRequest flowManager $ authorize token request
-                     
-  if statusCode status == 401
-  then do
-      putStrLn "Refreshing token now"
-      newToken <- refreshTokens webFlow token
-      -- Change this so that it doesn't try saving the refresh token
-      -- every time.
-      save newToken
-      (files', _) <- fromRequest flowManager $ authorize newToken request
-      next <- getNextPages webFlow newToken (files' >>= nextPage) url
-      return (files' `mappend` next)
-  else do
-      getNextPages webFlow token (files >>= nextPage) url >>= (\x -> return $ files `mappend` x)
-
-
- where
-   authorize (Just token) request = request
-                             {
-                               requestHeaders = [(hAuthorization, B8.pack $ "Bearer " ++ accessToken token)]
-                             }
-   url = "https://www.googleapis.com/drive/v2/files"
-   flowManager = getManager webFlow
-
-getChange :: Maybe Token -> OAuth2WebServerFlow -> Int -> IO (Maybe Change)
-getChange Nothing _ _ = return Nothing
-getChange (Just token) webFlow changeId = do
-  (result, status) <- fromAuthorizedUrl flowManager url [(hAuthorization, B8.pack $ "Bearer " ++ accessToken token)]
-  return result
+getChange :: Int -> Flow Change
+getChange changeId = do
+  webFlow <- get
+  let flowManager = getManager webFlow
+  token <- liftIO $ getAuthToken webFlow
+  (result, status) <- liftIO $ fromAuthorizedUrl flowManager url [(hAuthorization, B8.pack $ "Bearer " ++ (accessToken token))]
+  case result of
+       Nothing -> throwError "Could not get change information!"
+       Just chg -> return chg
  where
   url = "https://www.googleapis.com/drive/v2/changes?pageToken=" ++ (show changeId)
-  flowManager = getManager webFlow
 
-listChanges :: Maybe Token -> OAuth2WebServerFlow -> Int -> Maybe PageToken -> IO (Maybe Change)
-listChanges Nothing _ _ _ = return Nothing
-listChanges mToken webFlow changeId Nothing = getChange mToken webFlow changeId
-listChanges (Just token) webFlow changeId (Just nextChangePageToken) = do
+listChanges :: Int -> Maybe PageToken -> Flow Change
+listChanges changeId Nothing = getChange changeId
+listChanges changeId (Just nextChangePageToken) = do
   request <- parseUrl url
+  webFlow <- get
+  token <- liftIO $ getAuthToken webFlow
+  let flowManager = getManager webFlow
 
-  (change, status) <- fromRequest flowManager $ authorize token request
-  next <- listChanges (Just token) webFlow changeId (change >>= nextPageToken)
-  return $ change `mappend` next
+  (change, status) <- liftIO $ fromRequest flowManager $ authorize (accessToken token) request
+  case change of
+       Nothing -> throwError "Could not get list of changes!"
+       Just chg -> do
+       	    next <- listChanges changeId (change >>= nextPageToken)
+  	    return $ chg `mappend` next
  where
-   flowManager = getManager webFlow
-   url = "https://www.googleapis.com/drive/v2/changes"
-   headers = [(hAuthorization, B8.pack $ "Bearer " ++ accessToken token)]
-   params = [("pageToken", nextChangePageToken),
-   	     ("startChangeId", show changeId)]
-   authorize token request =
-   	     urlEncodedBody (map (second B8.pack) params)$ request 
+  url = "https://www.googleapis.com/drive/v2/changes"
+  headers token = [(hAuthorization, B8.pack $ "Bearer " ++ show token)]
+  params = [("pageToken", nextChangePageToken),
+       	    ("startChangeId", show changeId)]
+  authorize token request =
+   	    urlEncodedBody (map (second B8.pack) params)$ request 
 	     		    	 	    	     	   {
-								requestHeaders = headers
+								requestHeaders = headers token
 	     						   }

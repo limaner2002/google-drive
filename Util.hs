@@ -1,5 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Util
+module Util (
+       fromFileL,
+       fromFile,
+       fromUrl,
+       fromAuthorizedUrl,
+       fromRequest,
+       fromUrl'
+    )
     where
 
 import Data.Aeson
