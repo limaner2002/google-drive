@@ -5,7 +5,9 @@ module Util (
        fromUrl,
        fromAuthorizedUrl,
        fromRequest,
-       fromUrl'
+       fromUrl',
+       checkDirectory,
+       downloadFile
     )
     where
 
@@ -14,10 +16,15 @@ import Data.String
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString as BS
 import System.IO
+import System.Directory
+import Control.Monad.IO.Class (liftIO)
 import Control.Exception
 import Control.Arrow (second)
 import Network.HTTP.Conduit
-import Network.HTTP.Types (HeaderName)
+import Data.Conduit
+import Data.Conduit.Binary (sinkFile)
+import Control.Monad.Trans.Resource (runResourceT)
+import Network.HTTP.Types (HeaderName, hAuthorization)
 import Network.HTTP.Types.Status (Status(..))
 import qualified Data.ByteString.Char8 as C8
 
@@ -80,6 +87,8 @@ urlExceptionHandler (StatusCodeException status _ _) = do
   hPutStrLn stderr $ "Error when "++show (statusCode status)++" fetching JSON from url"
   hPutStrLn stderr $ show $ statusMessage status
   return ("", status)
+urlExceptionHandler someException = do
+  error $ show someException
 
 exceptHandler :: (Data.String.IsString a) => SomeException -> IO a
 exceptHandler err = do
@@ -102,3 +111,25 @@ getResponse manager request =
 
 tokenUrl :: BL.ByteString -> IO (Maybe Token)
 tokenUrl body = decodeToken (Data.Aeson.decode body)
+
+-- Checks to see if the directory specified in path exists and creates
+-- it if it does not already exist.
+checkDirectory :: FilePath -> IO()
+checkDirectory path = do
+  exists <- doesDirectoryExist path
+  if exists == False
+  then createDirectory path
+  else return ()
+
+downloadFile :: Manager -> Maybe String -> FilePath -> Token -> IO ()
+downloadFile _ Nothing _ _ = return ()
+downloadFile manager (Just url) localPath token = do
+  putStrLn $ "Downloading file " ++ (show url) ++ " to " ++ localPath
+  runResourceT $ do
+    request <- liftIO $ parseUrl url
+    result <- http (authorize request token) manager
+    responseBody result $$+- sinkFile localPath
+
+  putStrLn "Downloading file now."
+ where
+   authorize request token = request { requestHeaders = [(hAuthorization, C8.pack $ "Bearer " ++ accessToken token)] }

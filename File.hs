@@ -8,10 +8,12 @@ module File
       listFiles,
       getChange,
       Change(..),
-      listChanges
+      listChanges,
+      processChange
     )
     where
 
+import Data.Maybe (isJust)
 import Data.Aeson
 import Data.Aeson.Types
 import Control.Applicative ((<$>),(<*>))
@@ -35,21 +37,25 @@ import Util
 import Resource
 
 data ChangeItem = ChangeItem
-     { file :: Maybe File,
-       modificationDate :: String
-     }
+     { changeKind :: String,
+       file :: Maybe File,
+       modificationDate :: String,
+       deleted :: Bool
+     } deriving (Show)
 
 instance FromJSON ChangeItem
     where
-      parseJSON (Object o) = ChangeItem <$> o .:? "file" <*>
-      			     		    o .: "modificationDate"
+      parseJSON (Object o) = ChangeItem <$> o .: "kind" <*>
+      			     		    o .:? "file" <*>
+      			     		    o .: "modificationDate" <*>
+					    o .: "deleted"
       parseJSON _ = mzero
 
 data Change = Change
     { items :: [ChangeItem],
       largestChangeId :: String,
       nextPageToken :: Maybe PageToken
-    }
+    } deriving (Show)
 
 instance FromJSON Change
     where
@@ -57,15 +63,6 @@ instance FromJSON Change
       			     	    	o .: "largestChangeId" <*>
 					o .:? "nextPageToken"
       parseJSON _ = mzero
-
-instance Show Change
-    where
-      show change = foldl (++) "" $ changeMessages
-      	   where
-	     changeMessages = map (\x -> itemName x ++ " was changed by " ++ modifiedBy x ++ " at " ++ time x ++ " \n") $ items change
-	     itemName item = show $ fmap (name) $ file item
-	     modifiedBy item = show $ fmap (displayName . lastModifyingUser) $ file item
-	     time = modificationDate
 
 instance Monoid Change where
      mempty = Change [] "" Nothing
@@ -80,7 +77,8 @@ data File = File
             name :: String,
             mimeType :: String,
             parents :: [Parent],
-	    lastModifyingUser :: User
+	    lastModifyingUser :: User,
+	    downloadUrl :: Maybe String
           }
 
 instance Show File
@@ -94,7 +92,8 @@ instance FromJSON File
                                    obj .: "title" <*>
                                    obj .: "mimeType" <*>
                                    obj .:? "parents" .!= [] <*>
-				   obj .: "lastModifyingUser") value
+				   obj .: "lastModifyingUser" <*>
+				   obj .:? "downloadUrl") value
 
 data FileList = FileList
     { files :: [File],
@@ -138,12 +137,6 @@ listFiles (Just nextPageToken) = do
   files <- getFileList ("https://www.googleapis.com/drive/v2/files?pageToken="++nextPageToken)
   next <- listFiles (nextPage files)
   return $ files `mappend` next
---  where
---    authorize token request = request
---                              {
---                                requestHeaders = [(hAuthorization, B8.pack $ "Bearer " ++ accessToken token)]
---                              }
-
 
 getFileList :: String -> Flow FileList
 getFileList url = do
@@ -157,7 +150,6 @@ getFileList url = do
   case files of
        Nothing -> throwError "Could not get list of files!"
        Just list -> return list
---   getNextPages webFlow token (files >>= nextPage) url >>= (\x -> return $ files `mappend` x)
 
  where
    authorize token request = request
@@ -201,3 +193,22 @@ listChanges changeId (Just nextChangePageToken) = do
 	     		    	 	    	     	   {
 								requestHeaders = headers token
 	     						   }
+
+processChange :: Change -> Flow ()
+processChange change= do
+  webFlow <- get
+  let flowManager = getManager webFlow
+  token <- liftIO $ getAuthToken webFlow
+  let baseDir = localDirectory webFlow
+
+  liftIO $ checkDirectory $ localDirectory webFlow;
+
+  liftIO $ mapM_ (\item -> do
+  	   	     case (file item) of
+		     	  Nothing -> return ()
+		     	  Just f -> do
+  	   	     	       if (deleted item) == True
+		     	       then putStrLn $ name f ++ " was deleted"
+			       else downloadFile flowManager (downloadUrl f) (baseDir ++ "/" ++ name f) (token)
+		 ) (items change)
+  liftIO $ putStrLn $ show change

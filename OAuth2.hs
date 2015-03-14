@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module OAuth2 (
-               OAuth2WebServerFlow,
+               OAuth2WebServerFlow(localDirectory),
                createFlow,
 	       endFlow,
                getTokens,
@@ -52,7 +52,8 @@ data OAuth2WebServerFlow = OAuth2WebServerFlow
       loginHint :: !String,
       deviceUri :: !String,
       accessToken :: Maybe Token,
-      manager :: Manager
+      manager :: Manager,
+      localDirectory :: String
     }
 
 type Flow = ExceptT String (StateT OAuth2WebServerFlow IO)
@@ -73,16 +74,20 @@ createFlow configFile authorizationFile = do
   let loginHint = param "loginHint" conf
   let clientId = param "clientId" conf
   let clientSecret = param "clientSecret" conf
+  let localDirectory = param "localDirectory" conf
 
   return $ OAuth2WebServerFlow (CSRFToken clientId "someState" "drive")
          clientSecret oauthScope redirectUri
-         userAgent authUri tokenUri revokeUri loginHint deviceUri Nothing manager
+         userAgent authUri tokenUri revokeUri loginHint deviceUri Nothing manager localDirectory
 
 endFlow :: OAuth2WebServerFlow -> IO ()
 endFlow = closeManager . manager
   
 getManager :: OAuth2WebServerFlow -> Manager
 getManager = manager
+
+-- getLocalDir :: OAuth2WebServerFlow -> String
+-- getLocalDir = localDirectory
 
 getAuthorizeUrl :: OAuth2WebServerFlow -> String
 getAuthorizeUrl flow = request flow

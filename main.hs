@@ -24,7 +24,8 @@ mainLoop lastChange = do
   if changeId >= lastChange
   then do
     changeList <- listChanges lastChange (nextPageToken change)
-    liftIO $ putStrLn $ show changeList
+    -- liftIO $ putStrLn $ show changeList
+    processChange change
     let largestChange = read (largestChangeId changeList) :: Int
     mainLoop (largestChange+1)
 
@@ -53,7 +54,7 @@ start = do
 
 main :: IO ()
 main = do
-  webFlow <- createFlow "configuration" "authorization.txt" -- manager
+  webFlow <- createFlow "configuration" "authorization.txt"
 
   tid <- myThreadId
   installHandler sigINT (Catch $ handler 0 tid webFlow) Nothing
